@@ -51,7 +51,7 @@ public class WAPI
 	//on this library. For example, if ccm uses the esb-utils library, the ccm properties should
 	//contain the values for the map being passed in to the WAPI constructor.
 	public WAPI(HashMap<String, String> value) {
-		this.apiPrefix = value.get("apiPrefix");
+		this.setApiPrefix(value.get("apiPrefix"));
 		this.tokenServer = value.get("tokenServer");
 		this.key = value.get("key");
 		this.secret = value.get("secret");
@@ -62,6 +62,14 @@ public class WAPI
 		M_log.info("secret: " + this.secret);
 		M_log.info("renewal: " + this.renewal);
 		M_log.info("token: " + this.token);
+	}
+	
+	public String getApiPrefix() {
+		return apiPrefix;
+	}
+
+	public void setApiPrefix(String apiPrefix) {
+		this.apiPrefix = apiPrefix;
 	}
 	
 	//a token must be created at the time of construction
@@ -200,6 +208,6 @@ public class WAPI
 			return null;
 		}	
 		return tokenResponse;
-	}	
+	}
 		
 }

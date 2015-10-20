@@ -1,0 +1,5 @@
+tokenServer=some_server
+apiPrefix=some_prefix
+key=some_key
+secret=some_secret
+call=some_call
