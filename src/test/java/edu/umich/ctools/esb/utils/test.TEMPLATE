@@ -1,0 +1,5 @@
+dev.tokenServer=some_server
+dev.apiPrefix=some_prefix
+dev.key=some_key
+dev.secret=some_secret
+dev.call=some_call
