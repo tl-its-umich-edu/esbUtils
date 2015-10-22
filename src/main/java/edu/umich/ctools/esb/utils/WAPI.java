@@ -62,7 +62,7 @@ public class WAPI
 		this.tokenServer = value.get("tokenServer");
 		this.key = value.get("key");
 		this.secret = value.get("secret");
-		this.renewal = buidRenewal(this.key, this.secret);
+		this.renewal = buildRenewal(this.key, this.secret);
 		
 		M_log.info("tokenServer: " + tokenServer);
 		M_log.info("key: ..." + this.key.substring(this.key.length() -3));
@@ -80,7 +80,7 @@ public class WAPI
 	
 	//a token must be created at the time of construction
 	//this token will allow use of the ESB APIs
-	public String buidRenewal(String key, String secret) {
+	public String buildRenewal(String key, String secret) {
 		String b64 = base64KeySecret(key, secret);
 		b64 = "Basic " + b64; 
 		return b64;
