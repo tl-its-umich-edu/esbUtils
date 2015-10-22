@@ -30,13 +30,14 @@ public class RunTest {
 		RunTest runTest = new RunTest();
 		
 		Properties props = runTest.getProps();
+		String env = "qa.";
 		
 		HashMap<String, String> value = new HashMap<String, String>();
-		value.put("tokenServer", props.getProperty("tokenServer"));
-		value.put("apiPrefix", props.getProperty("apiPrefix"));
-		value.put("key", props.getProperty("key"));
-		value.put("secret", props.getProperty("secret"));
-		String call = props.getProperty("call");
+		value.put("tokenServer", props.getProperty(env + "tokenServer"));
+		value.put("apiPrefix", props.getProperty(env + "apiPrefix"));
+		value.put("key", props.getProperty(env + "key"));
+		value.put("secret", props.getProperty(env + "secret"));
+		String call = props.getProperty(env + "call");
 		WAPI wapi = new WAPI(value);
 		WAPIResultWrapper wrappedResult = wapi.getRequest(wapi.getApiPrefix() + call);
 		M_log.info(wrappedResult.toJson());

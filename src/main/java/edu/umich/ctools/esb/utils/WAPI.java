@@ -16,13 +16,21 @@ public class WAPI
 {
 	private static Log M_log = LogFactory.getLog(WAPI.class);
 
-	private final int HTTP_SUCCESS = 200;
-	private final int HTTP_BAD_REQUEST = 400;
-	private final int HTTP_UNAUTHORIZED = 401;
-	private final int HTTP_FORBIDDEN = 403;
-	private final int HTTP_NOT_FOUND = 404;
-	private final int HTTP_GATEWAY_TMEOUT = 504;
-	private final int HTTP_UNKNOWN_ERROR = 666;
+	private final static int HTTP_SUCCESS = 200;
+	private final static int HTTP_BAD_REQUEST = 400;
+	private final static int HTTP_UNAUTHORIZED = 401;
+	private final static int HTTP_FORBIDDEN = 403;
+	private final static int HTTP_NOT_FOUND = 404;
+	private final static int HTTP_GATEWAY_TMEOUT = 504;
+	private final static int HTTP_UNKNOWN_ERROR = 666;
+	
+	private final static String SUCCESS = "SUCCESS";
+	private final static String BAD_REQUEST = "BAD REQUEST";
+	private final static String UNAUTHORIZED = "UNAUTHORIZED";
+	private final static String FORBIDDEN = "FORBIDDEN";
+	private final static String NOT_FOUND = "NOT FOUND";
+	private final static String GATEWAY_TMEOUT = "GATEWAY TIMEOUT";
+	private final static String UNKNOWN_ERROR = "UNKNOWN ERROR";
 
 	private final static String CONTENT_TYPE = "Content-Type";
 	private final static String CONTENT_TYPE_PARAMETER = "application/x-www-form-urlencoded";
@@ -48,8 +56,7 @@ public class WAPI
 
 	//WAPI constructor will have single variable which will be a map holding all necessary variables
 	//The values for the map should come from a properties file used by the application that depends
-	//on this library. For example, if ccm uses the esb-utils library, the ccm properties should
-	//contain the values for the map being passed in to the WAPI constructor.
+	//on this library. 
 	public WAPI(HashMap<String, String> value) {
 		this.setApiPrefix(value.get("apiPrefix"));
 		this.tokenServer = value.get("tokenServer");
@@ -58,10 +65,9 @@ public class WAPI
 		this.renewal = buidRenewal(this.key, this.secret);
 		
 		M_log.info("tokenServer: " + tokenServer);
-		M_log.info("key: " + this.key);
-		M_log.info("secret: " + this.secret);
-		M_log.info("renewal: " + this.renewal);
-		M_log.info("token: " + this.token);
+		M_log.info("key: ..." + this.key.substring(this.key.length() -3));
+		M_log.info("secret: ..." + this.secret.substring(this.secret.length() -3));
+		M_log.info("renewal: ..." + this.renewal.substring(this.renewal.length() -3));
 	}
 	
 	public String getApiPrefix() {
@@ -99,13 +105,14 @@ public class WAPI
 					.header(AUTHORIZATION, this.token)
 					.header("Accept", "json")
 					.asString();
-			M_log.info("Raw body: " + response.getBody());
+			M_log.debug("Raw body: " + response.getBody());
 			M_log.info("Status: " + response.getStatus());
 			M_log.info("Status Text: " + response.getStatusText());
 			jsonObject = new JSONObject(response.getBody());
 			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
 		}
 		catch(Exception e){
+			M_log.error("Error attempting to make request: " + request);
 			M_log.error("Error in doRequest: " + e.getMessage());
 			wrappedResult = reportError(response.getStatus());
 		}
@@ -116,43 +123,50 @@ public class WAPI
 	public WAPIResultWrapper reportError(int status) {
 		M_log.info("reportError() called");
 		M_log.info("status: " + status);
-		WAPIResultWrapper wrappedResult = null;
+		String errMsg= null;
 		switch(status){
 			
 		case HTTP_BAD_REQUEST:
-			wrappedResult = new WAPIResultWrapper(HTTP_BAD_REQUEST, "BAD REQUEST", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_BAD_REQUEST;
+			errMsg = BAD_REQUEST;
 			break;
 			
 		case HTTP_UNAUTHORIZED:
-			wrappedResult = new WAPIResultWrapper(HTTP_UNAUTHORIZED, "UNAUTHORIZED", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_UNAUTHORIZED;
+			errMsg = UNAUTHORIZED;
 			break;
 		
 		case HTTP_FORBIDDEN:
-			wrappedResult = new WAPIResultWrapper(HTTP_FORBIDDEN, "FORBIDDEN", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_FORBIDDEN;
+			errMsg = FORBIDDEN;
 			break;	
 			
 		case HTTP_NOT_FOUND:
-			wrappedResult = new WAPIResultWrapper(HTTP_NOT_FOUND, "NOT FOUND", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_NOT_FOUND;
+			errMsg = NOT_FOUND;
 			break;
 			
 		case HTTP_GATEWAY_TMEOUT:
-			wrappedResult = new WAPIResultWrapper(HTTP_GATEWAY_TMEOUT, "GATEWAY TIME OUT", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_GATEWAY_TMEOUT;
+			errMsg = GATEWAY_TMEOUT;
 			break;
 			
 		case HTTP_UNKNOWN_ERROR:
-			wrappedResult = new WAPIResultWrapper(HTTP_UNKNOWN_ERROR, "UNKNOWN ERROR", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_UNKNOWN_ERROR;
+			errMsg = UNKNOWN_ERROR;
 			break;
 			
 		default:
-			wrappedResult = new WAPIResultWrapper(HTTP_UNKNOWN_ERROR, "UNKNOWN ERROR", new JSONObject("{error : " + ERROR_MSG + "}"));
+			status = HTTP_UNKNOWN_ERROR;
+			errMsg = UNKNOWN_ERROR;
 		}
-		return wrappedResult;
+		return new WAPIResultWrapper(status, errMsg, new JSONObject("{error : " + ERROR_MSG + "}"));
 	}
 
 	//Make a request, if error returned then try to renew token and try again.
 	public WAPIResultWrapper getRequest(String request) throws UnirestException{
 		WAPIResultWrapper wrappedResult = doRequest(request);
-		M_log.info("getRequest(); " + request);
+		M_log.info("getRequest() called with request: " + request);
 		if(wrappedResult.getStatus()==HTTP_UNAUTHORIZED){
 			wrappedResult = renewToken();
 			if(wrappedResult.getStatus()==HTTP_SUCCESS){
@@ -185,7 +199,7 @@ public class WAPI
 			}
 			return reportError(tokenResponse.getStatus());
 		}
-		M_log.debug("renewed token: " + this.token);
+		M_log.info("token successfully renewed - token: ..." + this.token.substring(this.token.length() -3));
 		return new WAPIResultWrapper(tokenResponse.getStatus(),"TOKEN RENEWED", new JSONObject(tokenResponse.getBody()));
 	}
 	
