@@ -18,7 +18,7 @@ public class WAPITest extends TestCase {
 
 	public void testBuidRenewal() {
 		WAPI wapi = new WAPI();
-		assertEquals(wapi.buidRenewal("AAA", "BBB"),"Basic QUFBOkJCQg==");
+		assertEquals(wapi.buildRenewal("AAA", "BBB"),"Basic QUFBOkJCQg==");
 	}
 
 	public void testBase64KeySecret() {
