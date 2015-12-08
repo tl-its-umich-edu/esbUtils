@@ -112,9 +112,13 @@ public class WAPI
 			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
 		}
 		catch(Exception e){
+			int checkStatus = HTTP_UNKNOWN_ERROR;
 			M_log.error("Error attempting to make request: " + request);
 			M_log.error("Error in doRequest: " + e.getMessage());
-			wrappedResult = reportError(response.getStatus());
+			if( response != null){
+				checkStatus = response.getStatus();
+			}
+			wrappedResult = reportError(checkStatus);
 		}
 		return wrappedResult;
 	}	
