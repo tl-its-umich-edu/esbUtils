@@ -8,38 +8,18 @@ import junit.framework.TestCase;
 
 public class WAPITest extends TestCase {
 
-	public void testWAPI() {
-		fail("Not yet implemented");
-	}
-
-	public void testWAPIHashMapOfStringString() {
-		fail("Not yet implemented");
-	}
+//	public void testWAPI() {
+//		fail("Not yet implemented");
+//	}
 
 	public void testBuidRenewal() {
 		WAPI wapi = new WAPI();
-		assertEquals(wapi.buidRenewal("AAA", "BBB"),"Basic QUFBOkJCQg==");
+		assertEquals(wapi.buildRenewal("AAA", "BBB"),"Basic QUFBOkJCQg==");
 	}
 
 	public void testBase64KeySecret() {
 		WAPI wapi = new WAPI();
 		assertEquals(wapi.base64KeySecret("AAA", "BBB"),"QUFBOkJCQg==");
-	}
-
-	public void testDoRequest() {
-		fail("Not yet implemented");
-	}
-
-	public void testReportError() {
-		fail("Not yet implemented");
-	}
-
-	public void testGetRequest() {
-		fail("Not yet implemented");
-	}
-
-	public void testRenewToken() {
-		fail("Not yet implemented");
 	}
 
 	public void testRunTokenRenewalPost() {
