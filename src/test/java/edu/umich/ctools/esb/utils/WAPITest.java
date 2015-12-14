@@ -12,10 +12,6 @@ public class WAPITest extends TestCase {
 //		fail("Not yet implemented");
 //	}
 
-//	public void testWAPIHashMapOfStringString() {
-//		fail("Not yet implemented");
-//	}
-
 	public void testBuidRenewal() {
 		WAPI wapi = new WAPI();
 		assertEquals(wapi.buildRenewal("AAA", "BBB"),"Basic QUFBOkJCQg==");
@@ -25,22 +21,6 @@ public class WAPITest extends TestCase {
 		WAPI wapi = new WAPI();
 		assertEquals(wapi.base64KeySecret("AAA", "BBB"),"QUFBOkJCQg==");
 	}
-
-//	public void testDoRequest() {
-//		fail("Not yet implemented");
-//	}
-
-//	public void testReportError() {
-//		fail("Not yet implemented");
-//	}
-
-//	public void testGetRequest() {
-//		fail("Not yet implemented");
-//	}
-
-//	public void testRenewToken() {
-//		fail("Not yet implemented");
-//	}
 
 	public void testRunTokenRenewalPost() {
 		WAPI wapi = new WAPI();

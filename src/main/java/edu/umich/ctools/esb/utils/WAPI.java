@@ -5,6 +5,8 @@ import java.util.HashMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.http.conn.ConnectTimeoutException;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.mashape.unirest.http.HttpResponse;
@@ -95,7 +97,7 @@ public class WAPI
 	}
 
 	//perform ESB request. If there is an exception, return exception result response.
-	public WAPIResultWrapper doRequest(String request) throws UnirestException{
+	public WAPIResultWrapper doRequest(String request){
 		M_log.info("doRequest: " + request);
 		WAPIResultWrapper wrappedResult = null;
 		JSONObject jsonObject = null;
@@ -111,8 +113,9 @@ public class WAPI
 			jsonObject = new JSONObject(response.getBody());
 			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
 		}
-		catch(Exception e){
+		catch(NullPointerException | UnirestException | JSONException e){
 			int checkStatus = HTTP_UNKNOWN_ERROR;
+			M_log.error("Error: " + e);
 			M_log.error("Error attempting to make request: " + request);
 			M_log.error("Error in doRequest: " + e.getMessage());
 			if( response != null){
@@ -219,7 +222,7 @@ public class WAPI
 					.field(GRANT_TYPE, CLIENT_CREDENTIALS)
 					.field(SCOPE, PRODUCTION)
 					.asJson();
-			M_log.info(tokenResponse.getBody());
+			M_log.debug(tokenResponse.getBody());
 		}
 		catch(Exception e){
 			M_log.error("Error renewing token: " + tokenResponse.getStatusText());
