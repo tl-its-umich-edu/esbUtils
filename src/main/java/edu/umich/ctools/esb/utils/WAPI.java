@@ -1,18 +1,35 @@
 package edu.umich.ctools.esb.utils;
 
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Properties;
+
+import javax.net.ssl.SSLContext;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.conn.ConnectTimeoutException;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContexts;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
+import org.apache.http.impl.nio.client.HttpAsyncClients;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+
+// http://unirest.io/java.html
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
+import com.mashape.unirest.request.body.MultipartBody;
 
 public class WAPI 
 {
@@ -33,27 +50,32 @@ public class WAPI
 	private final static String NOT_FOUND = "NOT FOUND";
 	private final static String GATEWAY_TMEOUT = "GATEWAY TIMEOUT";
 	private final static String UNKNOWN_ERROR = "UNKNOWN ERROR";
-
+	private final static String GRANT_TYPE = "grant_type";
+	private final static String SCOPE = "scope";
 	private final static String CONTENT_TYPE = "Content-Type";
 	private final static String CONTENT_TYPE_PARAMETER = "application/x-www-form-urlencoded";
 	private final static String AUTHORIZATION = "Authorization";
-	private final static String GRANT_TYPE = "grant_type";
 	private final static String CLIENT_CREDENTIALS = "client_credentials";
-	private final static String SCOPE = "scope";
 	private final static String PRODUCTION = "PRODUCTION";
+	
 	private final static String ERROR_MSG = "No results due to error. See meta for more details.";
-
 	private final String BEARER = "Bearer";
 
+	// query values that may come from properties.
 	private String apiPrefix;
 	private String tokenServer;
 	private String key;
 	private String secret;
-	private String renewal;
 	private String token;
+	private String grant_type_value = CLIENT_CREDENTIALS;
+	private String scope_value = PRODUCTION;
+	
+	private String renewal;
 	
 	public WAPI() {
 		super();
+		
+		//Unirest.setAsyncHttpClient(createSSLClient());
 	}
 
 	//WAPI constructor will have single variable which will be a map holding all necessary variables
@@ -65,7 +87,25 @@ public class WAPI
 		this.key = value.get("key");
 		this.secret = value.get("secret");
 		this.renewal = buildRenewal(this.key, this.secret);
-		
+
+		// override default value if have explicit value.
+		// TODO: replace explicit default with merge of default map and passed in.
+		// default_map.putAll(values);
+		//		map3 = new HashMap<>(map1);
+		//		map3.putAll(map2);
+
+		if (value.get("grant_type") != null) {
+			this.grant_type_value = value.get("grant_type");
+		}
+
+		if (value.get("scope") != null) {
+			this.scope_value = value.get("scope");
+		}
+		if (value.get("ignore_ssl_check") != null 
+				&& "true".equalsIgnoreCase(value.get("ignore_ssl_check"))) {
+			Unirest.setHttpClient(createPromiscuousSSLClient());
+		}
+
 		M_log.info("tokenServer: " + tokenServer);
 		M_log.info("key: ..." + this.key.substring(this.key.length() -3));
 		M_log.info("secret: ..." + this.secret.substring(this.secret.length() -3));
@@ -80,7 +120,7 @@ public class WAPI
 		this.apiPrefix = apiPrefix;
 	}
 	
-	//a token must be created at the time of construction
+	//A token must be created at the time of construction
 	//this token will allow use of the ESB APIs
 	public String buildRenewal(String key, String secret) {
 		String b64 = base64KeySecret(key, secret);
@@ -88,7 +128,7 @@ public class WAPI
 		return b64;
 	}
 
-	//esb calls require base 64 strings for authroization
+	//esb calls require base 64 strings for authorization
 	public String base64KeySecret(String key, String secret) {
 		String keySecret = key + ":" + secret;
 		byte[] binaryData = keySecret.getBytes();
@@ -96,6 +136,10 @@ public class WAPI
 		return keySecret;
 	}
 
+//	public WAPIResultWrapper doRequest(String request){
+//		return doRequest(request)
+//	}
+//	
 	//perform ESB request. If there is an exception, return exception result response.
 	public WAPIResultWrapper doRequest(String request){
 		M_log.info("doRequest: " + request);
@@ -185,6 +229,11 @@ public class WAPI
 	
 	//Renew token. Tokens are only good for one hour, so in the event a user is still
 	//logged in the token will need to be renewed.
+	
+	// result from IBM renewal
+	//  {"Meta":{"Message":"TOKEN RENEWED","httpStatus":200},"Result":{"array":[{"access_token":"AAEkYWM1NDY1MmItNWY1OS00YTljLWEzOWYtMzNmNzY1Njc1OTdiWA8lq9cNdD3vEik7kWVjecVUgQFqp-zEq1ZX8AsV5fCLeTNcNFK78rQ0eAsgldopJNUkmBRaFWoQ7XSspTrcPyYwFUjnA6v8tiSg7WBgI2Wy8rEE4lUlqtOEs7VGOegySKAh6UyEz-kBXiBuuU6M3orBDC7B3cH3QMbOkvaRnI4","metadata":"m:error on metadata url","scope":"unizingrades","token_type":"bearer","expires_in":3600}],"object":{"access_token":"AAEkYWM1NDY1MmItNWY1OS00YTljLWEzOWYtMzNmNzY1Njc1OTdiWA8lq9cNdD3vEik7kWVjecVUgQFqp-zEq1ZX8AsV5fCLeTNcNFK78rQ0eAsgldopJNUkmBRaFWoQ7XSspTrcPyYwFUjnA6v8tiSg7WBgI2Wy8rEE4lUlqtOEs7VGOegySKAh6UyEz-kBXiBuuU6M3orBDC7B3cH3QMbOkvaRnI4","metadata":"m:error on metadata url","scope":"unizingrades","token_type":"bearer","expires_in":3600}}}
+
+	
 	public WAPIResultWrapper renewToken(){
 		M_log.info("renewToken() called");
 		HttpResponse<JsonNode> tokenResponse = null;
@@ -210,8 +259,94 @@ public class WAPI
 		return new WAPIResultWrapper(tokenResponse.getStatus(),"TOKEN RENEWED", new JSONObject(tokenResponse.getBody()));
 	}
 	
+	
+	// working version for IBM token renewal
+//    AT=$(curl --request POST \
+//            -s \
+//            --url ${URL_PREFIX}/oauth2/token \
+//            --header 'accept: application/json' \
+//            --header 'content-type: application/x-www-form-urlencoded' \
+//            --data "grant_type=${GRANT_TYPE}&scope=${SCOPE}&client_id=${KEY}&client_secret=${SECRET}");
+    
 	//Specific request for renewing token
 	public HttpResponse<JsonNode> runTokenRenewalPost(){
+		M_log.info("runTokenRenewalPost() called");
+		M_log.info("TokenServer: " + this.tokenServer);
+		HttpResponse<JsonNode> tokenResponse = null;
+		MultipartBody tokenRequest = null;
+		
+		HashMap<String,String> headers = new HashMap<String,String>();
+		headers.put(CONTENT_TYPE, CONTENT_TYPE_PARAMETER);
+		
+		HashMap<String,Object> fields = new HashMap<String,Object>();
+		fields.put(GRANT_TYPE, grant_type_value);
+		fields.put(SCOPE, scope_value);
+		fields.put("client_id", key);
+		fields.put("client_secret",secret);
+		
+		try{
+			tokenRequest = Unirest.post(this.tokenServer)
+					.headers(headers)
+					.fields(fields)
+					//.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
+					//					.header(AUTHORIZATION, this.renewal)
+					// //	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
+					//.field(GRANT_TYPE, grant_type_value)
+					// //					.field(SCOPE, PRODUCTION)
+					//.field(SCOPE, scope_value)
+					//.field("client_id", key)
+					//.field("client_secret",secret)
+					//.asJson()
+					;
+			//M_log.debug(tokenResponse.getBody());
+			M_log.debug("tokenRequest: "+tokenRequest);
+			tokenResponse = tokenRequest.asJson();
+			M_log.debug("tokenResponseBody: "+tokenResponse.getBody());
+		}
+		//catch(UnirestException e){
+		catch(Exception e){
+			M_log.error("Error renewing token: " + e);
+			return null;
+		}	
+		return tokenResponse;
+		//return null;
+	}
+	
+	//Specific request for renewing token
+	public HttpResponse<JsonNode> runTokenRenewalPostA(){
+		M_log.info("runTokenRenewalPost() called");
+		M_log.info("TokenServer: " + this.tokenServer);
+		HttpResponse<JsonNode> tokenResponse = null;
+		MultipartBody tokenRequest = null;
+		HashMap<String,Object> fields = new HashMap<String,Object>();
+		try{
+			tokenRequest = Unirest.post(this.tokenServer)
+					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
+//					.header(AUTHORIZATION, this.renewal)
+					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
+					.field(GRANT_TYPE, grant_type_value)
+					//					.field(SCOPE, PRODUCTION)
+					.field(SCOPE, scope_value)
+					.field("client_id", key)
+					.field("client_secret",secret)
+					//.asJson()
+					;
+			//M_log.debug(tokenResponse.getBody());
+			M_log.debug(tokenRequest);
+			tokenResponse = tokenRequest.asJson();
+		}
+		//catch(UnirestException e){
+		catch(Exception e){
+			M_log.error("Error renewing token: " + e);
+			return null;
+		}	
+		return tokenResponse;
+		//return null;
+	}
+	
+
+	// this is the WSO2 style renewal
+	public HttpResponse<JsonNode> runTokenRenewalPostOLD(){
 		M_log.info("runTokenRenewalPost() called");
 		M_log.info("TokenServer: " + this.tokenServer);
 		HttpResponse<JsonNode> tokenResponse = null;
@@ -219,8 +354,10 @@ public class WAPI
 			tokenResponse = Unirest.post(this.tokenServer)
 					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
 					.header(AUTHORIZATION, this.renewal)
-					.field(GRANT_TYPE, CLIENT_CREDENTIALS)
-					.field(SCOPE, PRODUCTION)
+					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
+					.field(GRANT_TYPE, grant_type_value)
+					//					.field(SCOPE, PRODUCTION)
+					.field(SCOPE, scope_value)
 					.asJson();
 			M_log.debug(tokenResponse.getBody());
 		}
@@ -230,5 +367,42 @@ public class WAPI
 		}	
 		return tokenResponse;
 	}
+	
+	// get the proper group of properties from the properties file.
+	public static HashMap<String,String> getPropertiesInGroup(Properties props, String group, List<String> propertyNames) {
+	
+		HashMap<String, String> value = new HashMap<String, String>();
+		for(String key: propertyNames) {
+			String propertyValue = props.getProperty(group + "." +key);
+			if (propertyValue != null) {
+				value.put(key, propertyValue);
+			}
+		}
+		return value;
+	}
 		
+
+	// TODO: fix this!!!! THIS IS HORRIBLE.
+	// adapted from https://laurenthinoul.com/how-to-fix-unirest-general-sslengine-problem/.  
+	private CloseableHttpClient createPromiscuousSSLClient() {
+		TrustStrategy acceptingTrustStrategy = new TrustStrategy() {
+ 
+			@Override
+			public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
+				return true;
+			}
+		};
+ 
+		SSLContext sslContext = null;
+		try {
+			sslContext = SSLContexts.custom().loadTrustMaterial(null, acceptingTrustStrategy).build();
+		} catch (Exception e) {
+			M_log.error("Could not create SSLContext");
+		}
+ 
+		return HttpClients.custom()
+			.setHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
+			.setSslcontext(sslContext).build();
+	}
+	
 }

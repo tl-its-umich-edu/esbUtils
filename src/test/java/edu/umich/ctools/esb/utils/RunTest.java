@@ -3,6 +3,7 @@ package edu.umich.ctools.esb.utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
@@ -26,6 +27,20 @@ public class RunTest {
 		return props;
 	}
 
+//	// TODO: extract out method to pull in grouped properties and place in map.
+//	// should be property file independent
+//	//take input of Props, list of property names, name of group, 
+//	//loop through and return as hashmap
+//			
+//	public static HashMap<String,String> getPropertiesGroup	 (Properties props, String group, List<String> propertyNames) {
+//		HashMap<String, String> value = new HashMap<String, String>();
+//		String key = "tokenServer";
+//		propertyNames.add(key);
+//		
+//		value.put(key, props.getProperty(group + key));
+//		return value;
+//	}
+//	
 	public static void main(String [] args) throws UnirestException, IOException{
 		RunTest runTest = new RunTest();
 		
