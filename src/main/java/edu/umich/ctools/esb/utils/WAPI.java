@@ -82,6 +82,7 @@ public class WAPI
 	//The values for the map should come from a properties file used by the application that depends
 	//on this library. 
 	public WAPI(HashMap<String, String> value) {
+		
 		this.setApiPrefix(value.get("apiPrefix"));
 		this.tokenServer = value.get("tokenServer");
 		this.key = value.get("key");
@@ -101,6 +102,7 @@ public class WAPI
 		if (value.get("scope") != null) {
 			this.scope_value = value.get("scope");
 		}
+		
 		if (value.get("ignore_ssl_check") != null 
 				&& "true".equalsIgnoreCase(value.get("ignore_ssl_check"))) {
 			Unirest.setHttpClient(createPromiscuousSSLClient());
@@ -140,12 +142,31 @@ public class WAPI
 //		return doRequest(request)
 //	}
 //	
+	
+	
+//	function getSPEGrades {
+//	    #set -x
+//	    curl --request GET \
+//	         --url "${URL_PREFIX}/Unizin/data/CourseId/${COURSEID}/AssignmentTitle/${ASSIGNMENTTITLE}" \
+//	         --header 'accept: application/json' \
+//	         --header "authorization: Bearer ${ACCESS_TOKEN}" \
+//	         --header "gradedaftertime: ${GRADEAFTERTIME}" \
+//	         --header "x-ibm-client-id: ${IBM_CLIENT_ID}"
+//	}
+
+
+	public WAPIResultWrapper doRequest(String request,HashMap<String,String> headers){
+		M_log.error("doRequest with headers NOT IMPLEMENTED");
+		return null;
+	}
+	
 	//perform ESB request. If there is an exception, return exception result response.
 	public WAPIResultWrapper doRequest(String request){
 		M_log.info("doRequest: " + request);
 		WAPIResultWrapper wrappedResult = null;
 		JSONObject jsonObject = null;
 		HttpResponse<String> response = null;
+		
 		try{
 			response = Unirest.get(request)
 					.header(AUTHORIZATION, this.token)
@@ -169,6 +190,44 @@ public class WAPI
 		}
 		return wrappedResult;
 	}	
+	
+	public WAPIResultWrapper doRequestOLD(String request){
+		M_log.info("doRequest: " + request);
+		WAPIResultWrapper wrappedResult = null;
+		JSONObject jsonObject = null;
+		HttpResponse<String> response = null;
+		
+		HashMap<String,String> headers = new HashMap<String,String>();
+		headers.put(AUTHORIZATION, this.token);
+		headers.put("Accept", "json");
+		
+//		HashMap<String,Object> fields = new HashMap<String,Object>();
+		//fields.put(x.y);
+		try{
+			response = Unirest.get(request)
+//					.header(AUTHORIZATION, this.token)
+//					.header("Accept", "json")
+					.headers(headers)
+					.asString();
+			M_log.debug("Raw body: " + response.getBody());
+			M_log.info("Status: " + response.getStatus());
+			M_log.info("Status Text: " + response.getStatusText());
+			jsonObject = new JSONObject(response.getBody());
+			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
+		}
+		catch(NullPointerException | UnirestException | JSONException e){
+			int checkStatus = HTTP_UNKNOWN_ERROR;
+			M_log.error("Error: " + e);
+			M_log.error("Error attempting to make request: " + request);
+			M_log.error("Error in doRequest: " + e.getMessage());
+			if( response != null){
+				checkStatus = response.getStatus();
+			}
+			wrappedResult = reportError(checkStatus);
+		}
+		return wrappedResult;
+	}	
+	
 	
 	//Error handling for bad calls
 	public WAPIResultWrapper reportError(int status) {
@@ -268,7 +327,7 @@ public class WAPI
 //            --header 'content-type: application/x-www-form-urlencoded' \
 //            --data "grant_type=${GRANT_TYPE}&scope=${SCOPE}&client_id=${KEY}&client_secret=${SECRET}");
     
-	//Specific request for renewing token
+	//Specific request for renewing token.  Should be compatible with WSO2 and IBM
 	public HttpResponse<JsonNode> runTokenRenewalPost(){
 		M_log.info("runTokenRenewalPost() called");
 		M_log.info("TokenServer: " + this.tokenServer);
@@ -288,20 +347,10 @@ public class WAPI
 			tokenRequest = Unirest.post(this.tokenServer)
 					.headers(headers)
 					.fields(fields)
-					//.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
-					//					.header(AUTHORIZATION, this.renewal)
-					// //	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
-					//.field(GRANT_TYPE, grant_type_value)
-					// //					.field(SCOPE, PRODUCTION)
-					//.field(SCOPE, scope_value)
-					//.field("client_id", key)
-					//.field("client_secret",secret)
-					//.asJson()
 					;
-			//M_log.debug(tokenResponse.getBody());
-			M_log.debug("tokenRequest: "+tokenRequest);
+			M_log.error("tokenRequest: "+tokenRequest);
 			tokenResponse = tokenRequest.asJson();
-			M_log.debug("tokenResponseBody: "+tokenResponse.getBody());
+			M_log.error("tokenResponseBody: "+tokenResponse.getBody());
 		}
 		//catch(UnirestException e){
 		catch(Exception e){
@@ -309,7 +358,6 @@ public class WAPI
 			return null;
 		}	
 		return tokenResponse;
-		//return null;
 	}
 	
 	//Specific request for renewing token
