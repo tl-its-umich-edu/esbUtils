@@ -2,6 +2,7 @@ package edu.umich.ctools.esb.utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -40,21 +41,13 @@ public class RunTestIBM {
 
 	//private  void renewToken(RunTestIBM runTest) throws IOException {
 	public  WAPIResultWrapper renewToken() throws IOException {
-		//Properties props = runTest.getProps();
+
 		Properties props = getProps();
 		String group = "dev";
-		
-		
-		List<String> keys = (List<String>)Arrays.asList("tokenServer","apiPrefix","key","secret","scope");
-		
-//		HashMap<String, String> value = new HashMap<String, String>();
-//		
-//		value.put("tokenServer", props.getProperty(group + "tokenServer"));
-//		value.put("apiPrefix", props.getProperty(group + "apiPrefix"));
-//		value.put("key", props.getProperty(group + "key"));
-//		value.put("secret", props.getProperty(group + "secret"));
-//		value.put("scope",props.getProperty(group + "scope"));
-//		
+			
+		//Arrays.asList is fixed length, so use that to initialize a mutable array.
+		List<String> keys = new ArrayList<>(Arrays.asList("tokenServer","apiPrefix","key","secret","scope"));
+
 		HashMap<String,String> value = WAPI.getPropertiesInGroup(props, group,keys);
 		
 		value.put("ignore_ssl_check", "true");
@@ -77,32 +70,37 @@ public class RunTestIBM {
 	
 	//private  void getGrades(RunTestIBM runTest) throws IOException {
 	public WAPIResultWrapper getGrades() throws IOException {
-		//Properties props = runTest.getProps();
+
 		Properties props = getProps();
-		String env = "dev.";
-		
-		HashMap<String, String> value = new HashMap<String, String>();
+		String group = "dev";
 
-		value.put("tokenServer", props.getProperty(env + "tokenServer"));
-		value.put("apiPrefix", props.getProperty(env + "apiPrefix"));
-		value.put("key", props.getProperty(env + "key"));
-		value.put("secret", props.getProperty(env + "secret"));
-		value.put("scope",props.getProperty(env + "scope"));
+		//Arrays.asList is fixed length, so use that to initialize a mutable array.
+		List<String> keys = new ArrayList<>(Arrays.asList("tokenServer","apiPrefix","key","secret","scope"));
+		keys.add("gradedaftertime");
+		keys.add("COURSEID");
+		keys.add("ASSIGNMENTTITLE");
 
-		value.put("gradedaftertime", props.getProperty(env+"gradedaftertime"));
-		value.put("COURSEID", props.getProperty(env+"COURSEID"));
-		value.put("ASSIGNMENTTITLE", props.getProperty(env+"ASSIGNEMENTTITILE"));
+		HashMap<String,String> value = WAPI.getPropertiesInGroup(props, group,keys);
 		
 		value.put("ignore_ssl_check", "true");
 		
+		  //--url "${URL_PREFIX}/Unizin/data/CourseId/${COURSEID}/AssignmentTitle/${ASSIGNMENTTITLE}" 
+		
+		StringBuilder url = new StringBuilder();
+		url.append(value.get("apiprefix"))
+		.append("/Unizin/data/CourseId/")
+		.append(value.get("COURSEID"))
+		.append("/AssignmentTitle/")
+		.append(value.get("ASSIGNMENTTITLE"));
+		//values
+		
 		WAPI wapi = new WAPI(value);
-		String url = "";
 		
 		HashMap<String,String> headers = new HashMap<String,String>();
 		headers.put("Accept", "json");
 		headers.put("gradedaftertime",value.get("gradedaftertime"));
 		
-		WAPIResultWrapper wrappedResult = wapi.doRequest(url,headers);
+		WAPIResultWrapper wrappedResult = wapi.doRequest(url.toString(),headers);
 
 		M_log.info(wrappedResult.toJson());
 		return wrappedResult;

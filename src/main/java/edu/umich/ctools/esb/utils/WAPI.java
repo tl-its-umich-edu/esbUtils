@@ -103,10 +103,10 @@ public class WAPI
 			this.scope_value = value.get("scope");
 		}
 		
-		if (value.get("ignore_ssl_check") != null 
-				&& "true".equalsIgnoreCase(value.get("ignore_ssl_check"))) {
-			Unirest.setHttpClient(createPromiscuousSSLClient());
-		}
+//		if (value.get("ignore_ssl_check") != null 
+//				&& "true".equalsIgnoreCase(value.get("ignore_ssl_check"))) {
+//			Unirest.setHttpClient(createPromiscuousSSLClient());
+//		}
 
 		M_log.info("tokenServer: " + tokenServer);
 		M_log.info("key: ..." + this.key.substring(this.key.length() -3));
@@ -430,27 +430,27 @@ public class WAPI
 	}
 		
 
-	// TODO: fix this!!!! THIS IS HORRIBLE.
-	// adapted from https://laurenthinoul.com/how-to-fix-unirest-general-sslengine-problem/.  
-	private CloseableHttpClient createPromiscuousSSLClient() {
-		TrustStrategy acceptingTrustStrategy = new TrustStrategy() {
- 
-			@Override
-			public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
-				return true;
-			}
-		};
- 
-		SSLContext sslContext = null;
-		try {
-			sslContext = SSLContexts.custom().loadTrustMaterial(null, acceptingTrustStrategy).build();
-		} catch (Exception e) {
-			M_log.error("Could not create SSLContext");
-		}
- 
-		return HttpClients.custom()
-			.setHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
-			.setSslcontext(sslContext).build();
-	}
-	
+//	// TODO: fix this!!!! THIS IS HORRIBLE.
+//	// adapted from https://laurenthinoul.com/how-to-fix-unirest-general-sslengine-problem/.  
+//	private CloseableHttpClient createPromiscuousSSLClient() {
+//		TrustStrategy acceptingTrustStrategy = new TrustStrategy() {
+// 
+//			@Override
+//			public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
+//				return true;
+//			}
+//		};
+// 
+//		SSLContext sslContext = null;
+//		try {
+//			sslContext = SSLContexts.custom().loadTrustMaterial(null, acceptingTrustStrategy).build();
+//		} catch (Exception e) {
+//			M_log.error("Could not create SSLContext");
+//		}
+// 
+//		return HttpClients.custom()
+//			.setHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
+//			.setSslcontext(sslContext).build();
+//	}
+//	
 }
