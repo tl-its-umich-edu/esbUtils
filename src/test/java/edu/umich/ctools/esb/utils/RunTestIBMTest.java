@@ -8,8 +8,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.mashape.unirest.http.exceptions.UnirestException;
-
 public class RunTestIBMTest {
 
 	RunTestIBM rti = null;
@@ -22,14 +20,6 @@ public class RunTestIBMTest {
 	@After
 	public void tearDown() throws Exception {
 	}
-
-//	public static void main(String [] args) throws UnirestException, IOException{
-//		RunTestIBM runTest = new RunTestIBM();
-//
-//		runTest.renewToken(runTest);
-//		runTest.getGrades(runTest);
-//		
-//	}
 	
 	@Test
 	public void testRenewTokenIBM() {
@@ -41,7 +31,6 @@ public class RunTestIBMTest {
 		} catch (IOException e) {
 			fail("exception: "+e);
 		}
-
 	}
 	
 	@Test
@@ -50,16 +39,8 @@ public class RunTestIBMTest {
 			WAPIResultWrapper newTokenWrapper = rti.getGrades();
 			assertNotNull("have grades result",newTokenWrapper);
 			assertEquals("good status",200,newTokenWrapper.getStatus());
-		//	assertEquals("token renewal","TOKEN RENEWED",newTokenWrapper.getMessage());
 		} catch (IOException e) {
 			fail("exception: "+e);
 		}
-
 	}
-
-//	@Test
-//	public void testGetProps() {
-//		fail("Not yet implemented");
-//	}
-
 }

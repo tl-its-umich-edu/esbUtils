@@ -1,30 +1,39 @@
 package edu.umich.ctools.esb.utils;
 
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-import java.util.ArrayList;
+/*
+ * Wrapper for calls to the UMich ESB using the IBM API Manager.
+ * Will auto renew tokens on failure.
+ * Properties are provided in a HashMap to the contructor. 
+ * For ease this provides a utility function to read groups of properties
+ * from a file.
+ * 
+ * Properties required for connection and authorization are:
+ * - apiPrefix
+ * - tokenServer
+ * - key
+ * - secret
+ * - grant_type
+ * - scope
+ * 
+ * There may be additional properties in a group that are used by the caller to fill in 
+ * fields and headers for specific queries.
+ * 
+ * This is based on a prior version of WAPI suited for the WSO2 API Manager.  This 
+ * is likely not compatible without further work.
+ */
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
-import javax.net.ssl.SSLContext;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.http.conn.ConnectTimeoutException;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.SSLContexts;
-import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
-import org.apache.http.impl.nio.client.HttpAsyncClients;
+import org.apache.commons.lang3.time.StopWatch;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-
-// http://unirest.io/java.html
+// Documentation at http://unirest.io/java.html
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
@@ -74,13 +83,11 @@ public class WAPI
 	
 	public WAPI() {
 		super();
-		
-		//Unirest.setAsyncHttpClient(createSSLClient());
 	}
 
 	//WAPI constructor will have single variable which will be a map holding all necessary variables
 	//The values for the map should come from a properties file used by the application that depends
-	//on this library. 
+	//on this library. The values used here are to allow API connection and authorization.
 	public WAPI(HashMap<String, String> value) {
 		
 		this.setApiPrefix(value.get("apiPrefix"));
@@ -90,28 +97,23 @@ public class WAPI
 		this.renewal = buildRenewal(this.key, this.secret);
 
 		// override default value if have explicit value.
-		// TODO: replace explicit default with merge of default map and passed in.
-		// default_map.putAll(values);
-		//		map3 = new HashMap<>(map1);
-		//		map3.putAll(map2);
 
 		if (value.get("grant_type") != null) {
 			this.grant_type_value = value.get("grant_type");
 		}
-
 		if (value.get("scope") != null) {
 			this.scope_value = value.get("scope");
 		}
-		
-//		if (value.get("ignore_ssl_check") != null 
-//				&& "true".equalsIgnoreCase(value.get("ignore_ssl_check"))) {
-//			Unirest.setHttpClient(createPromiscuousSSLClient());
-//		}
 
 		M_log.info("tokenServer: " + tokenServer);
-		M_log.info("key: ..." + this.key.substring(this.key.length() -3));
-		M_log.info("secret: ..." + this.secret.substring(this.secret.length() -3));
-		M_log.info("renewal: ..." + this.renewal.substring(this.renewal.length() -3));
+		M_log.info("key: " + elideString(this.key));
+		M_log.info("secret: " + elideString(this.secret));
+		M_log.info("renewal: " + elideString(this.renewal));
+	}
+
+	// Print short version of a confidential string to identify it.
+	private String elideString(String stringToElide) {
+		return stringToElide.substring(0,3)+"..."+stringToElide.substring(stringToElide.length() -3);
 	}
 	
 	public String getApiPrefix() {
@@ -138,75 +140,86 @@ public class WAPI
 		return keySecret;
 	}
 
-//	public WAPIResultWrapper doRequest(String request){
-//		return doRequest(request)
-//	}
-//	
-	
-	
-//	function getSPEGrades {
-//	    #set -x
-//	    curl --request GET \
-//	         --url "${URL_PREFIX}/Unizin/data/CourseId/${COURSEID}/AssignmentTitle/${ASSIGNMENTTITLE}" \
-//	         --header 'accept: application/json' \
-//	         --header "authorization: Bearer ${ACCESS_TOKEN}" \
-//	         --header "gradedaftertime: ${GRADEAFTERTIME}" \
-//	         --header "x-ibm-client-id: ${IBM_CLIENT_ID}"
-//	}
-
-
-	public WAPIResultWrapper doRequest(String request,HashMap<String,String> headers){
-		M_log.error("doRequest with headers NOT IMPLEMENTED");
-		return null;
-	}
-	
-	//perform ESB request. If there is an exception, return exception result response.
-	public WAPIResultWrapper doRequest(String request){
-		M_log.info("doRequest: " + request);
-		WAPIResultWrapper wrappedResult = null;
-		JSONObject jsonObject = null;
-		HttpResponse<String> response = null;
-		
-		try{
-			response = Unirest.get(request)
-					.header(AUTHORIZATION, this.token)
-					.header("Accept", "json")
-					.asString();
-			M_log.debug("Raw body: " + response.getBody());
-			M_log.info("Status: " + response.getStatus());
-			M_log.info("Status Text: " + response.getStatusText());
-			jsonObject = new JSONObject(response.getBody());
-			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
-		}
-		catch(NullPointerException | UnirestException | JSONException e){
-			int checkStatus = HTTP_UNKNOWN_ERROR;
-			M_log.error("Error: " + e);
-			M_log.error("Error attempting to make request: " + request);
-			M_log.error("Error in doRequest: " + e.getMessage());
-			if( response != null){
-				checkStatus = response.getStatus();
-			}
-			wrappedResult = reportError(checkStatus);
-		}
-		return wrappedResult;
-	}	
-	
-	public WAPIResultWrapper doRequestOLD(String request){
-		M_log.info("doRequest: " + request);
-		WAPIResultWrapper wrappedResult = null;
-		JSONObject jsonObject = null;
-		HttpResponse<String> response = null;
-		
-		HashMap<String,String> headers = new HashMap<String,String>();
-		headers.put(AUTHORIZATION, this.token);
-		headers.put("Accept", "json");
-		
-//		HashMap<String,Object> fields = new HashMap<String,Object>();
-		//fields.put(x.y);
-		try{
-			response = Unirest.get(request)
+//perform ESB request. If there is an exception, return exception result response.
+//	public WAPIResultWrapper doRequestWSO2(String request){
+//		M_log.info("doRequest: " + request);
+//		WAPIResultWrapper wrappedResult = null;
+//		JSONObject jsonObject = null;
+//		HttpResponse<String> response = null;
+//		
+//		try{
+//			response = Unirest.get(request)
 //					.header(AUTHORIZATION, this.token)
 //					.header("Accept", "json")
+//					.asString();
+//			M_log.debug("Raw body: " + response.getBody());
+//			M_log.info("Status: " + response.getStatus());
+//			M_log.info("Status Text: " + response.getStatusText());
+//			jsonObject = new JSONObject(response.getBody());
+//			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
+//		}
+//		catch(NullPointerException | UnirestException | JSONException e){
+//			int checkStatus = HTTP_UNKNOWN_ERROR;
+//			M_log.error("Error: " + e);
+//			M_log.error("Error attempting to make request: " + request);
+//			M_log.error("Error in doRequest: " + e.getMessage());
+//			if( response != null){
+//				checkStatus = response.getStatus();
+//			}
+//			wrappedResult = reportError(checkStatus);
+//		}
+//
+//		return wrappedResult;
+//	}	
+	
+
+	// Wrapper for calls that don't require special headers..
+	public WAPIResultWrapper doRequest(String request){
+		return doRequest(request,null);
+	}
+	
+	// Make sure there is a headers map, add default value for the accept header
+	// and renew authorization token if it doesn't exist.
+	public HashMap<String,String> addDefaultRequestHeaders(HashMap<String,String> headers ){
+		
+		if (headers == null) {
+			headers = new HashMap<String,String>();
+		}
+		
+		// ensure that authorization has been done.
+		if (headers.get(AUTHORIZATION) == null) {
+			if (this.token == null) {
+				renewToken();
+			}
+			headers.put(AUTHORIZATION, this.token);
+		}
+		
+		if (headers.get("Accept") == null) {
+			headers.put("Accept", "json");
+		}
+
+		return headers;
+	}
+	
+	// Make a request and allow specifying headers.
+	public WAPIResultWrapper doRequest(String request,HashMap<String,String> headers){	
+		M_log.info("doRequest: " + request +" headers: "+headers);
+		WAPIResultWrapper wrappedResult = null;
+		JSONObject jsonObject = null;
+		HttpResponse<String> response = null;
+		
+		headers = addDefaultRequestHeaders(headers);
+		
+		M_log.info("doRequest: request: "+request.toString());
+		M_log.info("doRequest: headers: "+headers.toString());
+		if (headers.get("Authorization") == null) {
+			M_log.error("request has null Authorization. Maybe token renewal timeout.");
+			return reportError(HTTP_UNAUTHORIZED);
+		}
+
+		StopWatch sw = StopWatch.createStarted();
+		try{
+			response = Unirest.get(request)
 					.headers(headers)
 					.asString();
 			M_log.debug("Raw body: " + response.getBody());
@@ -225,11 +238,15 @@ public class WAPI
 			}
 			wrappedResult = reportError(checkStatus);
 		}
+		finally {
+			sw.stop();
+			M_log.info("WAPI: doRequest elapsed: "+sw.toString()+" request: "+request);
+		}
 		return wrappedResult;
 	}	
 	
 	
-	//Error handling for bad calls
+	//Error reporting for bad status.
 	public WAPIResultWrapper reportError(int status) {
 		M_log.info("reportError() called");
 		M_log.info("status: " + status);
@@ -285,17 +302,15 @@ public class WAPI
 		}
 		return wrappedResult;
 	}
-	
+
 	//Renew token. Tokens are only good for one hour, so in the event a user is still
 	//logged in the token will need to be renewed.
-	
-	// result from IBM renewal
-	//  {"Meta":{"Message":"TOKEN RENEWED","httpStatus":200},"Result":{"array":[{"access_token":"AAEkYWM1NDY1MmItNWY1OS00YTljLWEzOWYtMzNmNzY1Njc1OTdiWA8lq9cNdD3vEik7kWVjecVUgQFqp-zEq1ZX8AsV5fCLeTNcNFK78rQ0eAsgldopJNUkmBRaFWoQ7XSspTrcPyYwFUjnA6v8tiSg7WBgI2Wy8rEE4lUlqtOEs7VGOegySKAh6UyEz-kBXiBuuU6M3orBDC7B3cH3QMbOkvaRnI4","metadata":"m:error on metadata url","scope":"unizingrades","token_type":"bearer","expires_in":3600}],"object":{"access_token":"AAEkYWM1NDY1MmItNWY1OS00YTljLWEzOWYtMzNmNzY1Njc1OTdiWA8lq9cNdD3vEik7kWVjecVUgQFqp-zEq1ZX8AsV5fCLeTNcNFK78rQ0eAsgldopJNUkmBRaFWoQ7XSspTrcPyYwFUjnA6v8tiSg7WBgI2Wy8rEE4lUlqtOEs7VGOegySKAh6UyEz-kBXiBuuU6M3orBDC7B3cH3QMbOkvaRnI4","metadata":"m:error on metadata url","scope":"unizingrades","token_type":"bearer","expires_in":3600}}}
-
 	
 	public WAPIResultWrapper renewToken(){
 		M_log.info("renewToken() called");
 		HttpResponse<JsonNode> tokenResponse = null;
+		// if need to renew token then get rid of the old one.
+		this.token = null;
 		try{
 			tokenResponse = runTokenRenewalPost();
 			if(tokenResponse.getStatus()==HTTP_SUCCESS){
@@ -314,21 +329,13 @@ public class WAPI
 			}
 			return reportError(tokenResponse.getStatus());
 		}
-		M_log.info("token successfully renewed - token: ..." + this.token.substring(this.token.length() -3));
+		M_log.info("token successfully renewed - token: " + elideString(this.token));
+		M_log.info("token successfully renewed - token: " + this.token);
 		return new WAPIResultWrapper(tokenResponse.getStatus(),"TOKEN RENEWED", new JSONObject(tokenResponse.getBody()));
 	}
-	
-	
-	// working version for IBM token renewal
-//    AT=$(curl --request POST \
-//            -s \
-//            --url ${URL_PREFIX}/oauth2/token \
-//            --header 'accept: application/json' \
-//            --header 'content-type: application/x-www-form-urlencoded' \
-//            --data "grant_type=${GRANT_TYPE}&scope=${SCOPE}&client_id=${KEY}&client_secret=${SECRET}");
-    
-	//Specific request for renewing token.  Should be compatible with WSO2 and IBM
-	public HttpResponse<JsonNode> runTokenRenewalPost(){
+	    
+	//Specific request for renewing token.
+	public HttpResponse<JsonNode> runTokenRenewalPost() throws UnirestException{
 		M_log.info("runTokenRenewalPost() called");
 		M_log.info("TokenServer: " + this.tokenServer);
 		HttpResponse<JsonNode> tokenResponse = null;
@@ -343,6 +350,10 @@ public class WAPI
 		fields.put("client_id", key);
 		fields.put("client_secret",secret);
 		
+		M_log.info("runTokenRenewalPost: headers: "+headers.toString());
+		M_log.info("runTokenRenewalPost: fields: "+fields.toString());
+		
+		StopWatch sw = StopWatch.createStarted();
 		try{
 			tokenRequest = Unirest.post(this.tokenServer)
 					.headers(headers)
@@ -352,71 +363,47 @@ public class WAPI
 			tokenResponse = tokenRequest.asJson();
 			M_log.error("tokenResponseBody: "+tokenResponse.getBody());
 		}
-		//catch(UnirestException e){
-		catch(Exception e){
-			M_log.error("Error renewing token: " + e);
-			return null;
-		}	
-		return tokenResponse;
-	}
-	
-	//Specific request for renewing token
-	public HttpResponse<JsonNode> runTokenRenewalPostA(){
-		M_log.info("runTokenRenewalPost() called");
-		M_log.info("TokenServer: " + this.tokenServer);
-		HttpResponse<JsonNode> tokenResponse = null;
-		MultipartBody tokenRequest = null;
-		HashMap<String,Object> fields = new HashMap<String,Object>();
-		try{
-			tokenRequest = Unirest.post(this.tokenServer)
-					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
-//					.header(AUTHORIZATION, this.renewal)
-					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
-					.field(GRANT_TYPE, grant_type_value)
-					//					.field(SCOPE, PRODUCTION)
-					.field(SCOPE, scope_value)
-					.field("client_id", key)
-					.field("client_secret",secret)
-					//.asJson()
-					;
-			//M_log.debug(tokenResponse.getBody());
-			M_log.debug(tokenRequest);
-			tokenResponse = tokenRequest.asJson();
+		catch(UnirestException e){
+			M_log.error("Unirest exception renewing token: " + e);
+			throw e;
 		}
-		//catch(UnirestException e){
-		catch(Exception e){
-			M_log.error("Error renewing token: " + e);
-			return null;
-		}	
+		catch(RuntimeException e){
+			M_log.error("General Error renewing token: " + e);
+			throw e;
+		}
+		finally {
+			sw.stop();
+			M_log.info("WAPI: runTokenRenewalPost elapsed: "+sw.toString());
+		}
 		return tokenResponse;
-		//return null;
 	}
-	
 
 	// this is the WSO2 style renewal
-	public HttpResponse<JsonNode> runTokenRenewalPostOLD(){
-		M_log.info("runTokenRenewalPost() called");
-		M_log.info("TokenServer: " + this.tokenServer);
-		HttpResponse<JsonNode> tokenResponse = null;
-		try{
-			tokenResponse = Unirest.post(this.tokenServer)
-					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
-					.header(AUTHORIZATION, this.renewal)
-					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
-					.field(GRANT_TYPE, grant_type_value)
-					//					.field(SCOPE, PRODUCTION)
-					.field(SCOPE, scope_value)
-					.asJson();
-			M_log.debug(tokenResponse.getBody());
-		}
-		catch(Exception e){
-			M_log.error("Error renewing token: " + tokenResponse.getStatusText());
-			return null;
-		}	
-		return tokenResponse;
-	}
+//	public HttpResponse<JsonNode> runTokenRenewalPostWSO2(){
+//		M_log.info("runTokenRenewalPost() called");
+//		M_log.info("TokenServer: " + this.tokenServer);
+//		HttpResponse<JsonNode> tokenResponse = null;
+//		
+//		try{
+//			tokenResponse = Unirest.post(this.tokenServer)
+//					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
+//					.header(AUTHORIZATION, this.renewal)
+//					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
+//					.field(GRANT_TYPE, grant_type_value)
+//					//					.field(SCOPE, PRODUCTION)
+//					.field(SCOPE, scope_value)
+//					.asJson();
+//			M_log.debug(tokenResponse.getBody());
+//		}
+//		catch(Exception e){
+//			M_log.error("Error renewing token: " + tokenResponse.getStatusText());
+//			return null;
+//		}
+//		return tokenResponse;
+//	}
 	
-	// get the proper group of properties from the properties file.
+	// get the select group of properties from the properties file.
+	// selected properties start with "<group>."
 	public static HashMap<String,String> getPropertiesInGroup(Properties props, String group, List<String> propertyNames) {
 	
 		HashMap<String, String> value = new HashMap<String, String>();
@@ -428,29 +415,5 @@ public class WAPI
 		}
 		return value;
 	}
-		
-
-//	// TODO: fix this!!!! THIS IS HORRIBLE.
-//	// adapted from https://laurenthinoul.com/how-to-fix-unirest-general-sslengine-problem/.  
-//	private CloseableHttpClient createPromiscuousSSLClient() {
-//		TrustStrategy acceptingTrustStrategy = new TrustStrategy() {
-// 
-//			@Override
-//			public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
-//				return true;
-//			}
-//		};
-// 
-//		SSLContext sslContext = null;
-//		try {
-//			sslContext = SSLContexts.custom().loadTrustMaterial(null, acceptingTrustStrategy).build();
-//		} catch (Exception e) {
-//			M_log.error("Could not create SSLContext");
-//		}
-// 
-//		return HttpClients.custom()
-//			.setHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
-//			.setSslcontext(sslContext).build();
-//	}
-//	
+	
 }
