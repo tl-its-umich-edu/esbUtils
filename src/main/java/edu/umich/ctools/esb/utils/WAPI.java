@@ -42,6 +42,8 @@ import com.mashape.unirest.request.body.MultipartBody;
 
 public class WAPI 
 {
+	private static final String TOKEN_RENEWED = "TOKEN RENEWED";
+
 	private static Log M_log = LogFactory.getLog(WAPI.class);
 
 	private final static int HTTP_SUCCESS = 200;
@@ -111,7 +113,7 @@ public class WAPI
 		M_log.info("renewal: " + elideString(this.renewal));
 	}
 
-	// Print short version of a confidential string to identify it.
+	// Print short version of a confidential string to identify it without revealing it.
 	private String elideString(String stringToElide) {
 		return stringToElide.substring(0,3)+"..."+stringToElide.substring(stringToElide.length() -3);
 	}
@@ -140,43 +142,25 @@ public class WAPI
 		return keySecret;
 	}
 
-//perform ESB request. If there is an exception, return exception result response.
-//	public WAPIResultWrapper doRequestWSO2(String request){
-//		M_log.info("doRequest: " + request);
-//		WAPIResultWrapper wrappedResult = null;
-//		JSONObject jsonObject = null;
-//		HttpResponse<String> response = null;
-//		
-//		try{
-//			response = Unirest.get(request)
-//					.header(AUTHORIZATION, this.token)
-//					.header("Accept", "json")
-//					.asString();
-//			M_log.debug("Raw body: " + response.getBody());
-//			M_log.info("Status: " + response.getStatus());
-//			M_log.info("Status Text: " + response.getStatusText());
-//			jsonObject = new JSONObject(response.getBody());
-//			wrappedResult = new WAPIResultWrapper(response.getStatus(), "COMPLETED", jsonObject);
-//		}
-//		catch(NullPointerException | UnirestException | JSONException e){
-//			int checkStatus = HTTP_UNKNOWN_ERROR;
-//			M_log.error("Error: " + e);
-//			M_log.error("Error attempting to make request: " + request);
-//			M_log.error("Error in doRequest: " + e.getMessage());
-//			if( response != null){
-//				checkStatus = response.getStatus();
-//			}
-//			wrappedResult = reportError(checkStatus);
-//		}
-//
-//		return wrappedResult;
-//	}	
-	
-
-	// Wrapper for calls that don't require special headers..
+	/*********************************/
+	// Compatibility wrappers for old doRequest that defaults to doGetRequest
 	public WAPIResultWrapper doRequest(String request){
-		return doRequest(request,null);
+		return doGetRequest(request,null);
 	}
+	public WAPIResultWrapper doRequest(String request,HashMap<String,String> headers){
+		return doGetRequest(request,headers);
+	}
+
+	/********************************/
+	// Wrappers for calls that don't require special headers.	
+	public WAPIResultWrapper doGetRequest(String request){
+		return doGetRequest(request,null);
+	}
+	public WAPIResultWrapper doPutRequest(String request){
+		return doPutRequest(request,null);
+	}
+	/********************************/
+	
 	
 	// Make sure there is a headers map, add default value for the accept header
 	// and renew authorization token if it doesn't exist.
@@ -189,7 +173,11 @@ public class WAPI
 		// ensure that authorization has been done.
 		if (headers.get(AUTHORIZATION) == null) {
 			if (this.token == null) {
-				renewToken();
+				M_log.debug("renew token with default headers");
+				WAPIResultWrapper tokenRenewal = renewToken();
+				if (!TOKEN_RENEWED.equals(tokenRenewal.getMessage())) {
+					throw new WAPIException("token renewal failed  status: "+tokenRenewal.getStatus()+" msg: "+tokenRenewal.getMessage());
+				}
 			}
 			headers.put(AUTHORIZATION, this.token);
 		}
@@ -201,17 +189,25 @@ public class WAPI
 		return headers;
 	}
 	
-	// Make a request and allow specifying headers.
-	public WAPIResultWrapper doRequest(String request,HashMap<String,String> headers){	
-		M_log.info("doRequest: " + request +" headers: "+headers);
+	public WAPIResultWrapper doGetRequest(String request,HashMap<String,String> headers){
+		return doGetOrPutRequest("GET",request,headers);
+	}
+	
+	public WAPIResultWrapper doPutRequest(String request,HashMap<String,String> headers){
+		return doGetOrPutRequest("PUT",request,headers);
+	}
+	
+	public WAPIResultWrapper doGetOrPutRequest(String requestType, String request,HashMap<String,String> headers){	
+		M_log.debug("doGetOrPutRequest: " + request +" headers: "+headers);
+		M_log.debug("doGetOrPutRequest: url: "+request);
 		WAPIResultWrapper wrappedResult = null;
 		JSONObject jsonObject = null;
 		HttpResponse<String> response = null;
 		
 		headers = addDefaultRequestHeaders(headers);
 		
-		M_log.info("doRequest: request: "+request.toString());
-		M_log.info("doRequest: headers: "+headers.toString());
+		M_log.debug("doRequest: request: "+request.toString());
+		M_log.debug("doRequest: headers: "+headers.toString());
 		if (headers.get("Authorization") == null) {
 			M_log.error("request has null Authorization. Maybe token renewal timeout.");
 			return reportError(HTTP_UNAUTHORIZED);
@@ -219,9 +215,16 @@ public class WAPI
 
 		StopWatch sw = StopWatch.createStarted();
 		try{
-			response = Unirest.get(request)
-					.headers(headers)
-					.asString();
+			
+			if ("GET".equals(requestType.toUpperCase())) {
+				response = Unirest.get(request).headers(headers).asString();
+			} else if ("PUT".equals(requestType.toUpperCase())) {
+				response = Unirest.put(request).headers(headers).asString();
+			} else {
+				M_log.error("WAPI: Unirest: Invalid request type:"+requestType.toUpperCase());
+				return reportError(HTTP_UNKNOWN_ERROR);
+			}
+			
 			M_log.debug("Raw body: " + response.getBody());
 			M_log.info("Status: " + response.getStatus());
 			M_log.info("Status Text: " + response.getStatusText());
@@ -244,8 +247,7 @@ public class WAPI
 		}
 		return wrappedResult;
 	}	
-	
-	
+
 	//Error reporting for bad status.
 	public WAPIResultWrapper reportError(int status) {
 		M_log.info("reportError() called");
@@ -290,7 +292,7 @@ public class WAPI
 		return new WAPIResultWrapper(status, errMsg, new JSONObject("{error : " + ERROR_MSG + "}"));
 	}
 
-	//Make a request, if error returned then try to renew token and try again.
+	//Make a get request, if error returned then try to renew token and ask again.
 	public WAPIResultWrapper getRequest(String request) throws UnirestException{
 		WAPIResultWrapper wrappedResult = doRequest(request);
 		M_log.info("getRequest() called with request: " + request);
@@ -303,6 +305,19 @@ public class WAPI
 		return wrappedResult;
 	}
 
+	// Make a request, if error returned then try to renew token and ask again.
+	public WAPIResultWrapper putRequest(String request) throws UnirestException{
+		WAPIResultWrapper wrappedResult = doRequest(request);
+		M_log.info("getRequest() called with request: " + request);
+		if(wrappedResult.getStatus()==HTTP_UNAUTHORIZED){
+			wrappedResult = renewToken();
+			if(wrappedResult.getStatus()==HTTP_SUCCESS){
+				wrappedResult = doRequest(request);
+			}
+		}
+		return wrappedResult;
+	}
+	
 	//Renew token. Tokens are only good for one hour, so in the event a user is still
 	//logged in the token will need to be renewed.
 	
@@ -318,20 +333,20 @@ public class WAPI
 				this.token = this.BEARER + " " + json.getString("access_token");
 			}
 			if(tokenResponse.getStatus()!=HTTP_SUCCESS){
-				M_log.error("Error renewing token: " + tokenResponse.getStatusText());
+				M_log.error("Token renewal failed: status: "+tokenResponse.getStatus() + " msg: "+ tokenResponse.getStatusText());
 				return new WAPIResultWrapper(tokenResponse.getStatus(),"ERROR DURING TOKEN RENEWAL", new JSONObject("{" + tokenResponse.getBody() + "}"));
 			}
 		}
 		catch(Exception e){
-			M_log.error("renewalToken exception: " + e.getMessage());
+			M_log.error("Token renewal failed: exception: " + e.getMessage());
 			if(tokenResponse==null){
-				return new WAPIResultWrapper(HTTP_UNKNOWN_ERROR,"ERROR RENEWING TOKEN: NULL", new JSONObject("{error: " + ERROR_MSG + "}"));
+				return new WAPIResultWrapper(HTTP_UNKNOWN_ERROR,"ERROR RENEWING TOKEN:", new JSONObject("{error: " + ERROR_MSG + "}"));
 			}
 			return reportError(tokenResponse.getStatus());
 		}
 		M_log.info("token successfully renewed - token: " + elideString(this.token));
 		M_log.info("token successfully renewed - token: " + this.token);
-		return new WAPIResultWrapper(tokenResponse.getStatus(),"TOKEN RENEWED", new JSONObject(tokenResponse.getBody()));
+		return new WAPIResultWrapper(tokenResponse.getStatus(),TOKEN_RENEWED, new JSONObject(tokenResponse.getBody()));
 	}
 	    
 	//Specific request for renewing token.
@@ -359,9 +374,9 @@ public class WAPI
 					.headers(headers)
 					.fields(fields)
 					;
-			M_log.error("tokenRequest: "+tokenRequest);
+			M_log.debug("tokenRequest: "+tokenRequest);
 			tokenResponse = tokenRequest.asJson();
-			M_log.error("tokenResponseBody: "+tokenResponse.getBody());
+			M_log.debug("tokenResponseBody: "+tokenResponse.getBody());
 		}
 		catch(UnirestException e){
 			M_log.error("Unirest exception renewing token: " + e);
@@ -377,30 +392,6 @@ public class WAPI
 		}
 		return tokenResponse;
 	}
-
-	// this is the WSO2 style renewal
-//	public HttpResponse<JsonNode> runTokenRenewalPostWSO2(){
-//		M_log.info("runTokenRenewalPost() called");
-//		M_log.info("TokenServer: " + this.tokenServer);
-//		HttpResponse<JsonNode> tokenResponse = null;
-//		
-//		try{
-//			tokenResponse = Unirest.post(this.tokenServer)
-//					.header(CONTENT_TYPE, CONTENT_TYPE_PARAMETER)
-//					.header(AUTHORIZATION, this.renewal)
-//					//	.field(GRANT_TYPE, CLIENT_CREDENTIALS)
-//					.field(GRANT_TYPE, grant_type_value)
-//					//					.field(SCOPE, PRODUCTION)
-//					.field(SCOPE, scope_value)
-//					.asJson();
-//			M_log.debug(tokenResponse.getBody());
-//		}
-//		catch(Exception e){
-//			M_log.error("Error renewing token: " + tokenResponse.getStatusText());
-//			return null;
-//		}
-//		return tokenResponse;
-//	}
 	
 	// get the select group of properties from the properties file.
 	// selected properties start with "<group>."
@@ -416,4 +407,18 @@ public class WAPI
 		return value;
 	}
 	
+	// get the select group of properties from the properties file.
+	// selected properties start with "<group>."
+	public static HashMap<String,String> getPropertiesWithKeys(Properties props, List<String> propertyNames) {
+	
+		HashMap<String, String> value = new HashMap<String, String>();
+		for(String key: propertyNames) {
+			String propertyValue = props.getProperty(key);
+			if (propertyValue != null) {
+				value.put(key, propertyValue);
+			}
+		}
+		return value;
+	}
+
 }
