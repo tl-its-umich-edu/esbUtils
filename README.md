@@ -6,6 +6,8 @@ esbUtils is a java library to be used by other java applications to communicate 
 
 The code is kept in github and will be public.
 
+Version 2.x will run using the IBM API Manager.
+
 ## Building the project
 
 The application runs on Java 1.7. After checking out the source code use mvn to install.
