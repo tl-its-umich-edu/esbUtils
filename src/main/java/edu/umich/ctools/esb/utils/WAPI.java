@@ -46,13 +46,13 @@ public class WAPI
 
 	private static Log M_log = LogFactory.getLog(WAPI.class);
 
-	private final static int HTTP_SUCCESS = 200;
-	private final static int HTTP_BAD_REQUEST = 400;
-	private final static int HTTP_UNAUTHORIZED = 401;
-	private final static int HTTP_FORBIDDEN = 403;
-	private final static int HTTP_NOT_FOUND = 404;
-	private final static int HTTP_GATEWAY_TMEOUT = 504;
-	private final static int HTTP_UNKNOWN_ERROR = 666;
+	public final static int HTTP_SUCCESS = 200;
+	public final static int HTTP_BAD_REQUEST = 400;
+	public final static int HTTP_UNAUTHORIZED = 401;
+	public final static int HTTP_FORBIDDEN = 403;
+	public final static int HTTP_NOT_FOUND = 404;
+	public final static int HTTP_GATEWAY_TMEOUT = 504;
+	public final static int HTTP_UNKNOWN_ERROR = 666;
 	
 	private final static String SUCCESS = "SUCCESS";
 	private final static String BAD_REQUEST = "BAD REQUEST";
