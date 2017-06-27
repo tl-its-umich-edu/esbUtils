@@ -1,10 +1,12 @@
 # esbUtils
 
-##Description
+## Description
 
 esbUtils is a java library to be used by other java applications to communicate with the University of Michigan's ESB (API Store). 
 
-The code is kept in github and will be piblic.
+The code is kept in github and will be public.
+
+Version 2.x will run using the IBM API Manager.
 
 ## Building the project
 
@@ -16,7 +18,7 @@ mvn clean install
 
 This should produce a jar that can be added to larger applications.
 
-##Properties File for Testing
+## Properties File for Testing
 
 There is a test.TEMPLATE file in this project. To test, this file will have to be renamed to test.properties. The properties for the file are listed below:
 

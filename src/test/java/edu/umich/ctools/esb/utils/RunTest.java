@@ -3,6 +3,7 @@ package edu.umich.ctools.esb.utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
@@ -25,7 +26,7 @@ public class RunTest {
 		in.close();
 		return props;
 	}
-
+	
 	public static void main(String [] args) throws UnirestException, IOException{
 		RunTest runTest = new RunTest();
 		
