@@ -3,10 +3,10 @@ package edu.umich.ctools.esb.utils;
 /*
  * Wrapper for calls to the UMich ESB using the IBM API Manager.
  * Will auto renew tokens on failure.
- * Properties are provided in a HashMap to the contructor. 
+ * Properties are provided in a HashMap to the constructor.
  * For ease this provides a utility function to read groups of properties
  * from a file.
- * 
+ *
  * Properties required for connection and authorization are:
  * - apiPrefix
  * - tokenServer
@@ -14,11 +14,11 @@ package edu.umich.ctools.esb.utils;
  * - secret
  * - grant_type
  * - scope
- * 
- * There may be additional properties in a group that are used by the caller to fill in 
+ *
+ * There may be additional properties in a group that are used by the caller to fill in
  * fields and headers for specific queries.
- * 
- * This is based on a prior version of WAPI suited for the WSO2 API Manager.  This 
+ *
+ * This is based on a prior version of WAPI suited for the WSO2 API Manager.  This
  * is likely not compatible without further work.
  */
 
@@ -40,8 +40,10 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
 import com.mashape.unirest.request.body.MultipartBody;
 
-public class WAPI 
+public class WAPI
 {
+	private static final String TOKEN_FORCE_RENEWAL_FREQUENCY = "tokenForceRenewalFrequency";
+
 	private static final String TOKEN_RENEWED = "TOKEN RENEWED";
 
 	private static Log M_log = LogFactory.getLog(WAPI.class);
@@ -53,7 +55,8 @@ public class WAPI
 	public final static int HTTP_NOT_FOUND = 404;
 	public final static int HTTP_GATEWAY_TMEOUT = 504;
 	public final static int HTTP_UNKNOWN_ERROR = 666;
-	
+
+	@SuppressWarnings("unused")
 	private final static String SUCCESS = "SUCCESS";
 	private final static String BAD_REQUEST = "BAD REQUEST";
 	private final static String UNAUTHORIZED = "UNAUTHORIZED";
@@ -68,7 +71,7 @@ public class WAPI
 	private final static String AUTHORIZATION = "Authorization";
 	private final static String CLIENT_CREDENTIALS = "client_credentials";
 	private final static String PRODUCTION = "PRODUCTION";
-	
+
 	private final static String ERROR_MSG = "No results due to error. See meta for more details.";
 	private final String BEARER = "Bearer";
 
@@ -80,9 +83,23 @@ public class WAPI
 	private String token;
 	private String grant_type_value = CLIENT_CREDENTIALS;
 	private String scope_value = PRODUCTION;
-	
+
 	private String renewal;
-	
+
+	// number of requests to the web service.
+	private int requestCount = 0;
+
+	/********************/
+	// Allow periodic forced token renewals.  Particularly useful for checking token renewal behavior.
+
+	// keep track of the number of renewals.
+	private int tokenRenewalCount = 0;
+	// set count for how often should force renewal. 0 implies
+	// never force renewal.
+	private int tokenForceRenewalFrequency = 0;
+	/********************/
+
+
 	public WAPI() {
 		super();
 	}
@@ -91,7 +108,7 @@ public class WAPI
 	//The values for the map should come from a properties file used by the application that depends
 	//on this library. The values used here are to allow API connection and authorization.
 	public WAPI(HashMap<String, String> value) {
-		
+
 		this.setApiPrefix(value.get("apiPrefix"));
 		this.tokenServer = value.get("tokenServer");
 		this.key = value.get("key");
@@ -103,21 +120,28 @@ public class WAPI
 		if (value.get("grant_type") != null) {
 			this.grant_type_value = value.get("grant_type");
 		}
+
 		if (value.get("scope") != null) {
 			this.scope_value = value.get("scope");
+		}
+
+		if (value.get(TOKEN_FORCE_RENEWAL_FREQUENCY) != null) {
+			this.tokenForceRenewalFrequency = Integer.parseInt(value.get(TOKEN_FORCE_RENEWAL_FREQUENCY));
 		}
 
 		M_log.info("tokenServer: " + tokenServer);
 		M_log.info("key: " + elideString(this.key));
 		M_log.info("secret: " + elideString(this.secret));
 		M_log.info("renewal: " + elideString(this.renewal));
+
+		M_log.info(TOKEN_FORCE_RENEWAL_FREQUENCY+": "+this.tokenForceRenewalFrequency);
 	}
 
 	// Print short version of a confidential string to identify it without revealing it.
 	private String elideString(String stringToElide) {
 		return stringToElide.substring(0,3)+"..."+stringToElide.substring(stringToElide.length() -3);
 	}
-	
+
 	public String getApiPrefix() {
 		return apiPrefix;
 	}
@@ -125,12 +149,12 @@ public class WAPI
 	public void setApiPrefix(String apiPrefix) {
 		this.apiPrefix = apiPrefix;
 	}
-	
+
 	//A token must be created at the time of construction
 	//this token will allow use of the ESB APIs
 	public String buildRenewal(String key, String secret) {
 		String b64 = base64KeySecret(key, secret);
-		b64 = "Basic " + b64; 
+		b64 = "Basic " + b64;
 		return b64;
 	}
 
@@ -152,7 +176,7 @@ public class WAPI
 	}
 
 	/********************************/
-	// Wrappers for calls that don't require special headers.	
+	// Wrappers for calls that don't require special headers.
 	public WAPIResultWrapper doGetRequest(String request){
 		return doGetRequest(request,null);
 	}
@@ -160,62 +184,76 @@ public class WAPI
 		return doPutRequest(request,null);
 	}
 	/********************************/
-	
-	
+
+
 	// Make sure there is a headers map, add default value for the accept header
 	// and renew authorization token if it doesn't exist.
 	public HashMap<String,String> addDefaultRequestHeaders(HashMap<String,String> headers ){
-		
+
 		if (headers == null) {
 			headers = new HashMap<String,String>();
 		}
-		
-		// ensure that authorization has been done.
-		if (headers.get(AUTHORIZATION) == null) {
-			if (this.token == null) {
-				M_log.debug("renew token with default headers");
-				WAPIResultWrapper tokenRenewal = renewToken();
-				if (!TOKEN_RENEWED.equals(tokenRenewal.getMessage())) {
-					throw new WAPIException("token renewal failed  status: "+tokenRenewal.getStatus()+" msg: "+tokenRenewal.getMessage());
-				}
-			}
-			headers.put(AUTHORIZATION, this.token);
+
+		// Allow forcing renewal of token after a certain number of requests.
+		// This is critical for testing.
+		if (tokenForceRenewalFrequency > 0 && (requestCount % tokenForceRenewalFrequency == 0)) {
+			M_log.debug("force authorization to be null.");
+			headers.put(AUTHORIZATION,null);
 		}
-		
+		else {
+			// ensure that authorization has been done except when we forced it to be null.
+			if (headers.get(AUTHORIZATION) == null) {
+				if (this.token == null) {
+					M_log.debug("renew token with default headers");
+					WAPIResultWrapper tokenRenewal = renewToken();
+					if (!TOKEN_RENEWED.equals(tokenRenewal.getMessage())) {
+						throw new WAPIException("token renewal failed  status: "+tokenRenewal.getStatus()+" msg: "+tokenRenewal.getMessage());
+					}
+				}
+				headers.put(AUTHORIZATION, this.token);
+			}
+		}
+
 		if (headers.get("Accept") == null) {
 			headers.put("Accept", "json");
 		}
 
 		return headers;
 	}
-	
+
 	public WAPIResultWrapper doGetRequest(String request,HashMap<String,String> headers){
 		return doGetOrPutRequest("GET",request,headers);
 	}
-	
+
 	public WAPIResultWrapper doPutRequest(String request,HashMap<String,String> headers){
 		return doGetOrPutRequest("PUT",request,headers);
 	}
-	
-	public WAPIResultWrapper doGetOrPutRequest(String requestType, String request,HashMap<String,String> headers){	
+
+	// This does a single request.  Caller must handle any retries.
+
+	public WAPIResultWrapper doGetOrPutRequest(String requestType, String request,HashMap<String,String> headers){
 		M_log.debug("doGetOrPutRequest: " + request +" headers: "+headers);
 		M_log.debug("doGetOrPutRequest: url: "+request);
 		WAPIResultWrapper wrappedResult = null;
 		JSONObject jsonObject = null;
 		HttpResponse<String> response = null;
-		
+
+		// made another request.
+		requestCount++;
+
 		headers = addDefaultRequestHeaders(headers);
-		
+
 		M_log.debug("doRequest: request: "+request.toString());
 		M_log.debug("doRequest: headers: "+headers.toString());
-		if (headers.get("Authorization") == null) {
+
+		if (headers.get(AUTHORIZATION) == null) {
 			M_log.error("request has null Authorization. Maybe token renewal timeout.");
 			return reportError(HTTP_UNAUTHORIZED);
 		}
 
 		StopWatch sw = StopWatch.createStarted();
 		try{
-			
+
 			if ("GET".equals(requestType.toUpperCase())) {
 				response = Unirest.get(request).headers(headers).asString();
 			} else if ("PUT".equals(requestType.toUpperCase())) {
@@ -224,7 +262,7 @@ public class WAPI
 				M_log.error("WAPI: Unirest: Invalid request type:"+requestType.toUpperCase());
 				return reportError(HTTP_UNKNOWN_ERROR);
 			}
-			
+
 			M_log.debug("Raw body: " + response.getBody());
 			M_log.info("Status: " + response.getStatus());
 			M_log.info("Status Text: " + response.getStatusText());
@@ -246,7 +284,7 @@ public class WAPI
 			M_log.info("WAPI: doRequest elapsed: "+sw.toString()+" request: "+request);
 		}
 		return wrappedResult;
-	}	
+	}
 
 	//Error reporting for bad status.
 	public WAPIResultWrapper reportError(int status) {
@@ -254,37 +292,37 @@ public class WAPI
 		M_log.info("status: " + status);
 		String errMsg= null;
 		switch(status){
-			
+
 		case HTTP_BAD_REQUEST:
 			status = HTTP_BAD_REQUEST;
 			errMsg = BAD_REQUEST;
 			break;
-			
+
 		case HTTP_UNAUTHORIZED:
 			status = HTTP_UNAUTHORIZED;
 			errMsg = UNAUTHORIZED;
 			break;
-		
+
 		case HTTP_FORBIDDEN:
 			status = HTTP_FORBIDDEN;
 			errMsg = FORBIDDEN;
-			break;	
-			
+			break;
+
 		case HTTP_NOT_FOUND:
 			status = HTTP_NOT_FOUND;
 			errMsg = NOT_FOUND;
 			break;
-			
+
 		case HTTP_GATEWAY_TMEOUT:
 			status = HTTP_GATEWAY_TMEOUT;
 			errMsg = GATEWAY_TMEOUT;
 			break;
-			
+
 		case HTTP_UNKNOWN_ERROR:
 			status = HTTP_UNKNOWN_ERROR;
 			errMsg = UNKNOWN_ERROR;
 			break;
-			
+
 		default:
 			status = HTTP_UNKNOWN_ERROR;
 			errMsg = UNKNOWN_ERROR;
@@ -292,35 +330,50 @@ public class WAPI
 		return new WAPIResultWrapper(status, errMsg, new JSONObject("{error : " + ERROR_MSG + "}"));
 	}
 
-	//Make a get request, if error returned then try to renew token and ask again.
-	public WAPIResultWrapper getRequest(String request) throws UnirestException{
-		WAPIResultWrapper wrappedResult = doRequest(request);
+	// For the next few methods there must be some nice way to pass in the method and
+	// get around repeating code but that is something to do in the future.
+
+	public WAPIResultWrapper getRequest(String request){
 		M_log.info("getRequest() called with request: " + request);
+		return getRequest(request,null);
+	}
+
+	//Make a get request, if error returned then try to renew token and ask again.
+	public WAPIResultWrapper getRequest(String request,HashMap<String,String> headers){
+		WAPIResultWrapper wrappedResult = doGetRequest(request,headers);
+		M_log.info("getRequest() called with request: " + request+" headers: "+headers);
+
 		if(wrappedResult.getStatus()==HTTP_UNAUTHORIZED){
 			wrappedResult = renewToken();
 			if(wrappedResult.getStatus()==HTTP_SUCCESS){
-				wrappedResult = doRequest(request);
+				wrappedResult = doGetRequest(request,headers);
 			}
 		}
 		return wrappedResult;
 	}
 
 	// Make a request, if error returned then try to renew token and ask again.
-	public WAPIResultWrapper putRequest(String request) throws UnirestException{
-		WAPIResultWrapper wrappedResult = doRequest(request);
-		M_log.info("getRequest() called with request: " + request);
+	public WAPIResultWrapper putRequest(String request){
+		return putRequest(request,null);
+	}
+
+	// Make a request, if error returned then try to renew token and ask again.
+	public WAPIResultWrapper putRequest(String request,HashMap<String,String> headers){
+		WAPIResultWrapper wrappedResult = doPutRequest(request,headers);
+		M_log.info("putRequest() called with request: " + request+" headers: "+headers);
+
 		if(wrappedResult.getStatus()==HTTP_UNAUTHORIZED){
 			wrappedResult = renewToken();
 			if(wrappedResult.getStatus()==HTTP_SUCCESS){
-				wrappedResult = doRequest(request);
+				wrappedResult = doPutRequest(request,headers);
 			}
 		}
 		return wrappedResult;
 	}
-	
-	//Renew token. Tokens are only good for one hour, so in the event a user is still
-	//logged in the token will need to be renewed.
-	
+
+	// Explicitly renew token. Tokens are only good for a limited time (currently 1 hour),
+	// so in the event a that the run persists that long the token will need to be renewed.
+
 	public WAPIResultWrapper renewToken(){
 		M_log.info("renewToken() called");
 		HttpResponse<JsonNode> tokenResponse = null;
@@ -348,26 +401,32 @@ public class WAPI
 		M_log.info("token successfully renewed - token: " + this.token);
 		return new WAPIResultWrapper(tokenResponse.getStatus(),TOKEN_RENEWED, new JSONObject(tokenResponse.getBody()));
 	}
-	    
-	//Specific request for renewing token.
+
+	// Specific request for renewing token.
 	public HttpResponse<JsonNode> runTokenRenewalPost() throws UnirestException{
 		M_log.info("runTokenRenewalPost() called");
 		M_log.info("TokenServer: " + this.tokenServer);
+
+		M_log.info("entering token renewal count: "+tokenRenewalCount+" requestCount: "+requestCount);
+
+		// keep track of times need to renew the token.
+		tokenRenewalCount++;
+
 		HttpResponse<JsonNode> tokenResponse = null;
 		MultipartBody tokenRequest = null;
-		
+
 		HashMap<String,String> headers = new HashMap<String,String>();
 		headers.put(CONTENT_TYPE, CONTENT_TYPE_PARAMETER);
-		
+
 		HashMap<String,Object> fields = new HashMap<String,Object>();
 		fields.put(GRANT_TYPE, grant_type_value);
 		fields.put(SCOPE, scope_value);
 		fields.put("client_id", key);
 		fields.put("client_secret",secret);
-		
+
 		M_log.info("runTokenRenewalPost: headers: "+headers.toString());
 		M_log.info("runTokenRenewalPost: fields: "+fields.toString());
-		
+
 		StopWatch sw = StopWatch.createStarted();
 		try{
 			tokenRequest = Unirest.post(this.tokenServer)
@@ -392,11 +451,11 @@ public class WAPI
 		}
 		return tokenResponse;
 	}
-	
+
 	// get the select group of properties from the properties file.
 	// selected properties start with "<group>."
 	public static HashMap<String,String> getPropertiesInGroup(Properties props, String group, List<String> propertyNames) {
-	
+
 		HashMap<String, String> value = new HashMap<String, String>();
 		for(String key: propertyNames) {
 			String propertyValue = props.getProperty(group + "." +key);
@@ -406,11 +465,11 @@ public class WAPI
 		}
 		return value;
 	}
-	
+
 	// get the select group of properties from the properties file.
 	// selected properties start with "<group>."
 	public static HashMap<String,String> getPropertiesWithKeys(Properties props, List<String> propertyNames) {
-	
+
 		HashMap<String, String> value = new HashMap<String, String>();
 		for(String key: propertyNames) {
 			String propertyValue = props.getProperty(key);
