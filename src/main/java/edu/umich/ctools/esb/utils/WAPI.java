@@ -3,7 +3,7 @@ package edu.umich.ctools.esb.utils;
 /*
  * Wrapper for calls to the UMich ESB using the IBM API Manager.
  * Will auto renew tokens on failure.
- * Properties are provided in a HashMap to the contructor.
+ * Properties are provided in a HashMap to the constructor.
  * For ease this provides a utility function to read groups of properties
  * from a file.
  *
@@ -42,6 +42,8 @@ import com.mashape.unirest.request.body.MultipartBody;
 
 public class WAPI
 {
+	private static final String TOKEN_FORCE_RENEWAL_FREQUENCY = "tokenForceRenewalFrequency";
+
 	private static final String TOKEN_RENEWED = "TOKEN RENEWED";
 
 	private static Log M_log = LogFactory.getLog(WAPI.class);
@@ -94,7 +96,7 @@ public class WAPI
 	private int tokenRenewalCount = 0;
 	// set count for how often should force renewal. 0 implies
 	// never force renewal.
-	private int tokenRenewalFrequency = 0;
+	private int tokenForceRenewalFrequency = 0;
 	/********************/
 
 
@@ -123,8 +125,8 @@ public class WAPI
 			this.scope_value = value.get("scope");
 		}
 
-		if (value.get("tokenRenewalFrequency") != null) {
-			this.tokenRenewalFrequency = Integer.parseInt(value.get("tokenRenewalFrequency"));
+		if (value.get(TOKEN_FORCE_RENEWAL_FREQUENCY) != null) {
+			this.tokenForceRenewalFrequency = Integer.parseInt(value.get(TOKEN_FORCE_RENEWAL_FREQUENCY));
 		}
 
 		M_log.info("tokenServer: " + tokenServer);
@@ -132,7 +134,7 @@ public class WAPI
 		M_log.info("secret: " + elideString(this.secret));
 		M_log.info("renewal: " + elideString(this.renewal));
 
-		M_log.info("tokenRenewalFrequency: "+this.tokenRenewalFrequency);
+		M_log.info(TOKEN_FORCE_RENEWAL_FREQUENCY+": "+this.tokenForceRenewalFrequency);
 	}
 
 	// Print short version of a confidential string to identify it without revealing it.
@@ -194,7 +196,7 @@ public class WAPI
 
 		// Allow forcing renewal of token after a certain number of requests.
 		// This is critical for testing.
-		if (tokenRenewalFrequency > 0 && (requestCount % tokenRenewalFrequency == 0)) {
+		if (tokenForceRenewalFrequency > 0 && (requestCount % tokenForceRenewalFrequency == 0)) {
 			M_log.debug("force authorization to be null.");
 			headers.put(AUTHORIZATION,null);
 		}
