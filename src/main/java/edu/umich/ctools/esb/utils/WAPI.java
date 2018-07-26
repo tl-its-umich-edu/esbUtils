@@ -155,14 +155,14 @@ public class WAPI
 
 	// A token must be created at the time of construction
 	// this token will allow use of the ESB APIs
-	private String buildRenewal(String key, String secret) {
+	protected String buildRenewal(String key, String secret) {
 		String b64 = base64KeySecret(key, secret);
 		b64 = "Basic " + b64;
 		return b64;
 	}
 
 	//esb calls require base 64 strings for authorization
-	private String base64KeySecret(String key, String secret) {
+	protected String base64KeySecret(String key, String secret) {
 		String keySecret = key + ":" + secret;
 		byte[] binaryData = keySecret.getBytes();
 		keySecret = Base64.encodeBase64String(binaryData);
@@ -310,7 +310,7 @@ public class WAPI
 	}
 
 	//Error reporting for bad status.
-	protected WAPIResultWrapper reportError(int status) {
+	public WAPIResultWrapper reportError(int status) {
 		M_log.info("reportError() called");
 		M_log.info("status: " + status);
 		String errMsg= null;
