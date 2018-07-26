@@ -35,7 +35,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 // Documentation at http://unirest.io/java.html
-import edu.umich.ctools.esb.utils.UnirestWrapper;
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
