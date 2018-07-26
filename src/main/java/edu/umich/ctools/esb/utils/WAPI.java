@@ -155,14 +155,14 @@ public class WAPI
 
 	// A token must be created at the time of construction
 	// this token will allow use of the ESB APIs
-	public String buildRenewal(String key, String secret) {
+	private String buildRenewal(String key, String secret) {
 		String b64 = base64KeySecret(key, secret);
 		b64 = "Basic " + b64;
 		return b64;
 	}
 
 	//esb calls require base 64 strings for authorization
-	public String base64KeySecret(String key, String secret) {
+	private String base64KeySecret(String key, String secret) {
 		String keySecret = key + ":" + secret;
 		byte[] binaryData = keySecret.getBytes();
 		keySecret = Base64.encodeBase64String(binaryData);
@@ -219,7 +219,7 @@ public class WAPI
 
 	// Make sure there is a headers map, add default value for the accept header
 	// and renew authorization token if it doesn't exist.
-	public HashMap<String,String> addDefaultRequestHeaders(HashMap<String,String> headers ){
+	protected HashMap<String,String> addDefaultRequestHeaders(HashMap<String,String> headers ){
 
 		if (headers == null) {
 			headers = new HashMap<String,String>();
@@ -310,7 +310,7 @@ public class WAPI
 	}
 
 	//Error reporting for bad status.
-	public WAPIResultWrapper reportError(int status) {
+	protected WAPIResultWrapper reportError(int status) {
 		M_log.info("reportError() called");
 		M_log.info("status: " + status);
 		String errMsg= null;
@@ -354,7 +354,7 @@ public class WAPI
 	}
 
 	// Wrapper to deal with token renewal and query retry.
-	public WAPIResultWrapper getOrPutRequestWithRetry(String requestType, String request,HashMap<String,String> headers){
+	protected WAPIResultWrapper getOrPutRequestWithRetry(String requestType, String request,HashMap<String,String> headers){
 		WAPIResultWrapper wrappedResult = doGetRequest(request,headers);
 		M_log.info("getOrPutRequestWithRetry() called with request type: " + requestType + " request: "+request+" headers: "+headers);
 
@@ -424,7 +424,7 @@ public class WAPI
 	}
 
 	// Specific request for renewing token.
-	public HttpResponse<JsonNode> runTokenRenewalPost() throws UnirestException{
+	protected HttpResponse<JsonNode> runTokenRenewalPost() throws UnirestException{
 		M_log.info("runTokenRenewalPost() called");
 		M_log.info("TokenServer: " + this.tokenServer);
 

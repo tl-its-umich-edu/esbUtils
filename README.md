@@ -46,10 +46,10 @@ Once you have this information it is possible to update the properties file
 with the appropriate information for you to begin testing and verify the 
 utility is working.
 
-NOTE: This secure will not be kept in a properties file in this project, 
-but held in the properties file of the application that is using the library. 
-For example, if Canvas Course Manager was to use this library then in CCM's 
-properties file you would find these properties there.
+NOTE: This secure information will not be kept in a properties file in this 
+project, but held in a properties file of the application that is using the 
+library. For example, if Canvas Course Manager was to use this library then 
+include the secure properties in a CCM properties file.
 
 ## Testing Application
 
@@ -71,13 +71,11 @@ also makes available *putRequest* and *getRequest* methods that a) can take
 optional headers and b) will automatically try to renew an expired token.  
 Use of other request methods is discouraged.
 
+Version 2.2 - Fixes a bug with updating tokens.
+
 ## Things to do (TTD)
 * Improve test files.
 * Depreciate old methods.
 * Update java version to 1.8.
-* Make several methods protected since they aren't useful outside the 
-library. At least the constructors, getRequest, putRequest, and renewToken
-methods should remain available.  Methods starting with *do* should be
-restricted, depreciated, or removed.
 * Extract the Ruby version of this from Dash and make the APIs correspond.
 
