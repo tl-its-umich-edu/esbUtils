@@ -188,6 +188,7 @@ public class WAPI
 		return doGetOrPutRequest(GET,request,headers);
 	}
 
+
 	public WAPIResultWrapper getRequest(String request){
 		M_log.info("getRequest() called with request: " + request);
 		return getRequest(request,null);
@@ -355,22 +356,30 @@ public class WAPI
 
 	// Wrapper to deal with token renewal and query retry.
 	protected WAPIResultWrapper getOrPutRequestWithRetry(String requestType, String request,HashMap<String,String> headers){
-		WAPIResultWrapper wrappedResult = doGetRequest(request,headers);
-		M_log.info("getOrPutRequestWithRetry() called with request type: " + requestType + " request: "+request+" headers: "+headers);
+		WAPIResultWrapper wrappedResult = null;
+		wrappedResult = choosePutOrGetRequestResult(requestType, request, headers, wrappedResult);
+		M_log.info("getOrPutRequestWithRetry() called with request type: " + requestType + " request: " + request + " headers: " + headers);
 
-		if(wrappedResult.getStatus()==HTTP_UNAUTHORIZED){
+		if (wrappedResult.getStatus() == HTTP_UNAUTHORIZED) {
 			wrappedResult = renewToken();
-			if(wrappedResult.getStatus()==HTTP_SUCCESS){
+			if (wrappedResult.getStatus() == HTTP_SUCCESS) {
 				headers = updateAuthHeader(headers);
-				if (GET.equals(requestType)) {
-					wrappedResult = doGetRequest(request,headers);
-				}
-				if (PUT.equals(requestType)) {
-					wrappedResult = doPutRequest(request,headers);
-				}
+				wrappedResult = choosePutOrGetRequestResult(requestType, request, headers, wrappedResult);
 			}
 		}
 		return wrappedResult;
+	}
+
+	private WAPIResultWrapper choosePutOrGetRequestResult(String requestType, String request, HashMap<String, String> headers, WAPIResultWrapper wrappedResult) {
+		M_log.info("choosePutOrGetRequestResult() called with request type: " + requestType);
+		if (GET.equals(requestType)) {
+			return(wrappedResult = doGetRequest(request, headers));
+		}
+		if (PUT.equals(requestType)) {
+			return(wrappedResult = doPutRequest(request, headers));
+		}
+		M_log.info("WAPI: Unrecognized request type: " +requestType);
+		throw new WAPIException("Unrecognized request type: " +requestType);
 	}
 
 
